@@ -22,14 +22,17 @@ said it can provide 2.4 amps *per socket* and all LEDs white would be 6amps so I
 to the strip. I know nothing about electrical engineering so I hope that's okay. I can say running the lamp for hours
 nothing is getting hot. Slightly warm but not hot.
 
+Note: the diagram above is from [this guide](https://learn.adafruit.com/adafruit-neopixel-uberguide/basic-connections)
+
 Parts I used (sorry for the Japan amazon links but I live in Tokyo)
 
 * [Arduino UNO R3 with case](https://www.amazon.co.jp/gp/product/B0756D3R7K/ref=ppx_yo_dt_b_asin_title_o02_s00?ie=UTF8&psc=1)
 * [Ikea HOLMÖ Lamp](https://www.ikea.com/us/en/p/holmoe-floor-lamp-with-led-bulb-white-70394126/)
+* [144 LED 1 Meter 5V strip](https://www.amazon.co.jp/gp/product/B01MYT6JH9/ref=ppx_yo_dt_b_asin_title_o03_s03?ie=UTF8&psc=1)
 * [E26 light socket to wall socket adaptor](https://www.amazon.com/Comyan-Polarized-Splitter-Standard-Install/dp/B07SQ511XT/ref=sr_1_34?)
 * [A RAVPower 24w 2port USB Charger](https://www.amazon.co.jp/gp/product/B075L2LBD6/ref=ppx_yo_dt_b_asin_title_o02_s02?ie=UTF8&psc=1)
-* 330Ω resistor
-* 1000µF capacitor
+* 330Ω resistor (I know the diagram shows 470Ω. I have no idea what the correct one is. I saw lots of other diagrams using 330Ω 🤷‍♂️)
+* 1000µF capacitor 6.3V or higher
 * A USB cable I cut and soldered in to the LED strip with the capacitor (see the +5V at bottom of the diagram)
 * [1 meter foam tube (optional?)](https://www.google.com/search?q=foam+tube+white) 
 
