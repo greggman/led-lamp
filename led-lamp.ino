@@ -36,6 +36,23 @@ int lerp(int min, int max, int t, int range) {
   return min + (int32_t)(max - min) * t / range;
 }
 
+int euclideanModulo(int n, int m) {
+  return ((n % m) + m) % m;
+}
+
+float euclideanModulo(float n, float m) {
+  return fmod((fmod(n, m) + m), m);
+}
+
+int lerp360(int min, int max, int t, int range) {
+  if (abs(min - max) > 180) {
+    max = max + 180;
+  }
+  min = euclideanModulo(min, 360);
+  max = euclideanModulo(max, 360);
+  return lerp(min, max, t, range);
+}
+
 // an API that uses ints. This makes most math much easier, no warnings, no errors
 // for example. Imaging you have an object that moves down the strip coveving 10 pixels
 // 
@@ -82,6 +99,26 @@ struct LED {
       strip.fill(color, start, len);
     }    
   };
+  static void setPixelCoverage(float start, float coverage, uint32_t color) {
+    LED::setPixel(start, LED::ColorRGB(
+        ((color >> 16) & 0xFF) * coverage,
+        ((color >>  8) & 0xFF) * coverage,
+        ((color >>  0) & 0xFF) * coverage));
+    
+  }
+  static void fill(uint32_t color, float start, float len) {
+    /*
+          |   .    |       |   .    |
+          |   <----|-------|--->    |
+     */
+    float end = start + len;
+    float startCoverage = (len >= 1.0f ? 1.0f : euclideanModulo(end, 1.0f)) - euclideanModulo(start, 1.0f);
+    LED::setPixelCoverage(start, startCoverage, color);
+    LED::fill(color, (int)ceilf(start), (int)(floorf(end) - ceilf(start)));
+    if (len > 1.0) {
+      LED::setPixelCoverage(start + len, euclideanModulo(end, 1.0f), color);
+    }
+  }
   // hue in 0 to 360
   static uint32_t ColorHSV(int hueDegrees, int sat, int val) {
     return LED::ColorHSV16(degTo16(hueDegrees), sat, val);
@@ -114,59 +151,72 @@ void clearDelay(int duration) {
   delay(duration);
 }
 
-// Ideas:
-// x heartbeat
-// O snow (pile up?)
-// O rain (splash?)
-// x fireflies
-// x ripples
-// x twinkles
-// x fire
-// x fireworks
-// O cherry blossoms
-// x bomb (sparker tip)  
-// x time bomb (binary clock, bomb gets brighter) 
-// x breakout
-// x traffic (with stop light, cars are 2 or 3 lights)
-// x fuseBomb
-// x inchworm
-// x drips
+/* Ideas:
+
+x fix breakout particles
+O do sakura better
+x make sparkles more and pick random hue +/1 15
+x fix hue lerp in particles to be circular
+O fix traffic light to 1 light
+x make inchwork brighter in middle when short
+O grow inchwork as it eats?
+O add acceleration / deceleration to traffic?
+O asteroids?
+x pong with paddles getting closer?
+O count 1, 2, 3 down strip?
+x fix drips not waiting for last drip
+O shooting stars? (is that same as fireworks just without explosion?) maybe it's a roman candle and like reverse drip it builds then shoots
+O drop ball with bounce (similar to dip)
+x jump up platforms
+O sand clock
+O fix binary clock bomb so it always fits
+O make snow collect?
+* fade in breakout and/or traffic (and fade it out)
+O pulsing power pellet for pacman?
+O lava lamp
+
+x heartbeat
+O snow (pile up?)
+O rain (splash?)
+x fireflies
+x ripples
+x twinkles
+x fire
+x fireworks
+O cherry blossoms
+x bomb (sparker tip)  
+x time bomb (binary clock, bomb gets brighter) 
+x breakout
+x traffic (with stop light, cars are 2 or 3 lights)
+x fuseBomb
+x inchworm
+x drips
+
+*/
 
 void loop() {
-  #if 0
+  #if 1
 //  testSparks();
-    pacman();
+    //lavaLamp();
   #else
-    pacman();
-    clearDelay(1000);
-    ripples();
-    clearDelay(1000);
-    timeBomb();
-    clearDelay(1000);
-    heartbeat(30);
-    clearDelay(1000);
-    snow();
-    clearDelay(1000);
+    pacman();          clearDelay(1000);
+    ripples();         clearDelay(1000);
+    timeBomb();        clearDelay(1000);
+    heartbeat(30);     clearDelay(1000);
+    snow();            clearDelay(1000);
     inchworm();
-    inchworm();
-    clearDelay(1000);
-    fireworks(30);
-    clearDelay(1000);
-    drips();
-    clearDelay(1000);
-    fireflies();
-    clearDelay(1000);
-    fuseBomb();
-    clearDelay(1000);
-    breakout();
-    clearDelay(1000);
-    cherryBlossoms();
-    clearDelay(1000);
-    fire();
-    clearDelay(1000);
-    traffic(120 * 30);
-    twinkles();
-    clearDelay(1000);
+    inchworm();        clearDelay(1000);
+    fireworks(30);     clearDelay(1000);
+    drips();           clearDelay(1000);
+    fireflies();       clearDelay(1000);
+    mario();           clearDelay(1000);
+    fuseBomb();        clearDelay(1000);
+    breakout();        clearDelay(1000);
+    cherryBlossoms();  clearDelay(1000);
+    fire();            clearDelay(1000);
+    traffic(120 * 30); 
+    twinkles();        clearDelay(1000);
+    pong();            clearDelay(1000);
   #endif
 }
 
@@ -211,12 +261,12 @@ bool processSparks() {
     int val;
     int halfDuration = spark.duration / 2;
     if (spark.time < halfDuration) {
-      hue = lerp(spark.hueDeg3, spark.hueDeg2, spark.time, halfDuration);
+      hue = lerp360(spark.hueDeg3, spark.hueDeg2, spark.time, halfDuration);
       sat = lerp(spark.sat3, spark.sat2, spark.time, halfDuration);
       val = lerp(spark.val3, spark.val2, spark.time, halfDuration);
     } else {
       int time = spark.time - halfDuration;
-      hue = lerp(spark.hueDeg2, spark.hueDeg, time, halfDuration);
+      hue = lerp360(spark.hueDeg2, spark.hueDeg, time, halfDuration);
       sat = lerp(spark.sat2, spark.sat, time, halfDuration);
       val = lerp(spark.val2, spark.val, time, halfDuration);
     }
@@ -253,13 +303,195 @@ void testSparks() {
   }  
 }
 
+void lavaLamp() {
+  struct Blob {
+    float start;
+    float size;
+    float growDir;
+    float vel;
+    int hue;
+    int targetHue;
+  };
+  Blob blobs[3];
+  float minSize = 3;
+  float maxSize = 20;
+
+  for (auto& blob : blobs) {
+    blob.hue = random(360);
+    blob.targetHue = blob.hue;
+    blob.start = random(1, LED::numPixels - 7);
+    blob.size = random(3, 6);
+    blob.vel = random(-150, 150) / 2000.0f;
+    blob.growDir = random(2) ? -1 : 1;
+  }
+  float growVel = 0.01;
+
+  while (true) {
+    LED::clear();
+    for (auto& blob : blobs) {
+      blob.start += blob.vel;
+      if (blob.start < 0.0f) {
+        blob.vel = random(1, 30) / 100.0f;
+      } else if ((blob.start + blob.size) >= LED::numPixels) {
+        blob.vel = -random(1, 30) / 100.0f;
+      }
+      blob.size += blob.growDir * growVel;
+      if (blob.size <= minSize) { blob.growDir = 1; }
+      else if (blob.size >= maxSize) { blob.growDir = -1; }
+      blob.hue = lerp(blob.hue, blob.targetHue, 1, 30);
+      LED::fill(LED::ColorHSV(blob.hue, 255, 255), blob.start, blob.size);
+    }
+    LED::show();
+    delay(5);
+  }
+  
+}
+
+void mario() {
+  struct Platform {
+    int pos;
+    bool enemy;
+  };
+  Platform platforms[15];
+  int p = 0;
+  for (auto& platform : platforms) {
+    p += random(10, 20);
+    platform.pos = p;
+    platform.enemy = random(4) == 0;
+  }
+  for (int i = 0; i < 100; ++i) {
+    LED::clear();
+    float s = sin(i / 100.f * PI * 0.5f);
+    for (auto& platform : platforms) {
+      LED::setPixel(platform.pos * s, 0xFFFFFF);
+    }
+    LED::show();
+    delay(5);
+  }
+  
+  float pos = 0.0f;
+  int state = 0;
+  int wait = 100;
+  float vel = 0.0f;
+  float accel = -0.05f;
+  int platformTargetNdx = 0;
+  int frame = 0;
+  while (state != 0 || pos < LED::numPixels) {
+    ++frame;
+    LED::clear();
+    switch (state) {
+      case 0: // waiting
+        --wait;
+        if (wait <= 0) {
+          state = 1;
+          vel = 1.5f;
+        }
+        break;
+      case 1: // jumping
+        vel += accel;
+        pos += vel;
+        Platform& platform = platforms[platformTargetNdx];
+        int targetHeight = platform.pos;
+        if (vel < 0 && pos <= targetHeight) {
+          if (platform.enemy) {
+            platform.enemy = false;
+            addSpark(
+              platform.pos,
+              300,   // vel
+              -10,   // acc
+              120,    // dur
+              120,   // h
+              255,   // s
+              255,   // v
+              120,
+              255,
+              255);
+          }
+          pos = targetHeight + 1;
+          state = 0;
+          wait = random(80, 200);
+          ++platformTargetNdx;
+        }
+        break;
+    }
+
+    for (auto& platform : platforms) {
+      LED::setPixel(platform.pos, 0xFFFFFF);
+      if (platform.enemy) {
+        int val = sin(frame * 0.04f + platform.pos) * 0.5 * 128 + 127;
+        LED::fill(LED::ColorHSV(120, 255, val), platform.pos + 2, 3);
+      }
+    }
+    LED::fill(0x0000FF, pos, 3.0f);
+    LED::fill(0xFF0000, pos + 5.0f, 3.0f);
+    processSparks();
+    LED::show();
+    delay(5);
+  }
+  for (auto& platform : platforms) {
+    addSpark(
+      platform.pos,  // pos
+      0,         // vel
+      -2,        // acc
+      150,       // dur
+      0,         // h
+      0,         // s
+      255,       // v
+      0,
+      0,
+      128);
+  }
+  bool hasSparks = true;
+  while (hasSparks) {
+    LED::clear();
+    hasSparks = processSparks();
+    LED::show();
+    delay(5);
+  }
+}
+
+void pong() {
+  int top = LED::numPixels - 1;
+  int bottom = 0;
+  int ball = LED::numPixels / 2;
+  int dir = random(2) ? -1 : 1;
+
+  int frame = 0;
+  while (top > bottom) {
+    ++frame;
+    LED::clear();
+
+    if (frame % 16 == 0) {
+      --top;
+      ++bottom;
+    }
+
+    ball += dir;
+    if (ball <= bottom) {
+      dir = 1;
+    }
+    if (ball >= top) {
+      dir = -1;
+    }
+
+    LED::setPixel(top, 0xFFFFFF);
+    LED::setPixel(bottom, 0xFFFFFF);
+    float sat = powf(1.0f - (top - bottom) / (float)LED::numPixels, 5.0f);
+    LED::setPixel(ball, LED::ColorHSV(0, 255 * sat, 255));
+    
+    LED::show();
+    delay(5);
+  }
+  
+  explosion(LED::numPixels / 2);
+}
 void drips() {
   int numDrips = 10;
   int duration = 0;
   int timer = 0;
   int splashTimer = 0;
   bool haveSparks = true;
-  while (numDrips || haveSparks) {
+  while (numDrips || timer || haveSparks) {
     LED::clear();
     if (timer <= 0 && numDrips) {
       duration = random(1000, 3000);
@@ -342,22 +574,23 @@ void fireflies() {
 }
 
 void twinkles() {
-  int numTwinkles = 30;
+  int numTwinkles = 60;
+  int baseHue = random(360);
   bool haveSparks = true;
   while (numTwinkles || haveSparks) {
     LED::clear();
-    if (numTwinkles && random(100) == 0) {
+    if (numTwinkles && random(15) == 0) {
       --numTwinkles;
-      int hue = random(360);
+      int hue = baseHue + random(30);
       addSpark2(
           random(LED::numPixels),     // pos
-          0,              // vel
-          0,              // acc, 
+          0,                // vel
+          0,                // acc, 
           100,              // duration
           hue,              // hue,
           255,              // sat,
           128,              // val,
-          hue,               // hue2,
+          hue,              // hue2,
           128,              // sat2,
           255,              // val2,
           hue,
@@ -412,6 +645,24 @@ void breakout() {
   int brickSize = 6;
   int pos = 0;
   int vel = 70;
+
+  for (numBricks = 0; numBricks < maxBricks; ++numBricks) {
+    int target = LED::numPixels - (numBricks + 1) * brickSize;
+    {
+      int hue = lerp(0, 360, numBricks, maxBricks);
+      for (int p = 0; p < target; p += 2) {
+        LED::clear();
+        LED::fill(LED::ColorHSV(hue, 255, 255), p, brickSize);
+        for (int i = 0; i < numBricks; ++i) {
+          int hue = lerp(0, 360, i, maxBricks);
+          LED::fill(LED::ColorHSV(hue, 255, 255), LED::numPixels - (i + 1) * brickSize, brickSize);
+        }        
+        LED::show();
+        delay(5);
+      }
+    }
+  }
+  delay(1000);
   while (numBricks || haveSparks) {
     LED::clear();
     for (int i = 0; i < numBricks; ++i) {
@@ -427,18 +678,18 @@ void breakout() {
         vel = -vel;
         --numBricks;
         for (int i = 0; i < 6; ++i) {
-          int vel = random(10) * -1; //(random(2) ? 1 : -1);
+          int vel = random(50, 100); //(random(2) ? 1 : -1);
           int hue = lerp(0, 360, numBricks, maxBricks);
           addSpark2(
             effectivePos,     // pos
             vel,              // vel
-            -2,              // acc, 
+            -2,               // acc, 
             100,              // duration
             hue,              // hue,
             255,              // sat,
             255,              // val,
-            hue,               // hue2,
-            128,              // sat2,
+            hue,              // hue2,
+            255,              // sat2,
             255,              // val2,
             hue,
             255,
@@ -489,8 +740,11 @@ void timeBomb() {
       --count;
     }
   }
+  explosion(pos);
+}
 
-  for (int i = 0; i < NUM_SPARKS; ++i) {
+void explosion(int pos) {
+    for (int i = 0; i < NUM_SPARKS; ++i) {
     int maxVel = random(100, 300);
     int vel = random(0, maxVel) * (random(2) ? 1 : -1);
     int hue = random(30, 60);          
@@ -516,8 +770,8 @@ void timeBomb() {
     LED::show();
     delay(5);
   }
-}
 
+}
 void heartbeat(int beats) {
   int pos = LED::numPixels * 2 / 3;
   for (int b = 0; b < beats; ++b) {
@@ -830,7 +1084,11 @@ void inchworm() {
       setPixelColor(foodPos[i], LED::ColorHSV16(degTo16(360 - 30), 255, 255)); //lerp(0, 255, foodAmount[i], foodEnergy)));
     }
     for (int i = tail; i < head - 1; ++i) {
-      setPixelColor(i, LED::ColorHSV16(degTo16(110), 200, 200));
+      int range = head - tail;
+      float zeroToOne = sin((i - tail) / (float)range * PI) * 0.5f + 0.5f;
+      int val = pow(zeroToOne, 5.0f) * 255;
+      //val = lerp(val, 64, range, length);
+      setPixelColor(i, LED::ColorHSV16(degTo16(110), 200, val));
     }
     setPixelColor(head - 1, LED::ColorHSV16(degTo16(0), 255, 255));
     setPixelColor(head, LED::ColorHSV16(degTo16(0), 255, 255));
