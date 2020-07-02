@@ -202,6 +202,7 @@ void loop() {
     pacman();          clearDelay(1000);
     ripples();         clearDelay(1000);
     timeBomb();        clearDelay(1000);
+    bounce();          clearDelay(1000);
     heartbeat(30);     clearDelay(1000);
     snow();            clearDelay(1000);
     inchworm();
@@ -345,6 +346,55 @@ void lavaLamp() {
     delay(5);
   }
   
+}
+
+void bounce() {
+  struct Ball {
+    float pos;
+    float vel;
+    int hue;
+  };
+  Ball balls[20];
+  for(auto& ball : balls) {
+    ball.pos = -1;
+  }
+  int numBalls = 24;
+  int numActive = 0;
+  float gravity = -0.05f;
+  float fudge = 0.8f;
+  while (numBalls || numActive) {
+    numActive = 0;
+    LED::clear();
+    for (auto& ball : balls) {
+      if (ball.pos >= 0) {
+        ++numActive;
+        ball.vel += gravity;
+        ball.pos += ball.vel;
+        if (ball.pos < 0) {
+          ball.pos = -ball.pos;
+          ball.vel = -ball.vel * fudge;
+          if (ball.vel < 1.0f) {
+            ball.pos = -1;
+          }
+        }
+        LED::setPixel(ball.pos, LED::ColorHSV(ball.hue, 255, 255));
+      }
+    }
+    
+    if (numBalls && numActive < (int)ARRAY_SIZE(balls) && random(200) == 0) {
+      --numBalls;
+      for (auto& ball : balls) {
+        if (ball.pos < 0) {
+          ball.pos = LED::numPixels;
+          ball.vel = 0;
+          ball.hue = random(360);
+          break;
+        }
+      }
+    }
+    LED::show();
+    delay(5);
+  }
 }
 
 void mario() {
