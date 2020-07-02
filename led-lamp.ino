@@ -169,9 +169,9 @@ O shooting stars? (is that same as fireworks just without explosion?) maybe it's
 O drop ball with bounce (similar to dip)
 x jump up platforms
 O sand clock
-O fix binary clock bomb so it always fits
+x fix binary clock bomb so it always fits
 O make snow collect?
-* fade in breakout and/or traffic (and fade it out)
+x fade in breakout and/or traffic (and fade it out)
 O pulsing power pellet for pacman?
 O lava lamp
 
@@ -710,7 +710,7 @@ void breakout() {
 }
 
 void timeBomb() {
-  int pos = random(LED::numPixels / 8, LED::numPixels * 2);
+  int pos = random(LED::numPixels / 8, LED::numPixels / 2);
   int speed = random(70, 120);
   int size = 3;
   int space = 5;
