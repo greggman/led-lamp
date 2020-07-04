@@ -141,6 +141,11 @@ struct LED {
 Adafruit_NeoPixel LED::strip = Adafruit_NeoPixel(LAMPS, PIN, NEO_GRB + NEO_KHZ800);
 
 void setup() {
+  Serial.begin(9600);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }  
+  Serial.println("hello");
   memset(&sparks, 0, sizeof(sparks));
   LED::init();
 }
@@ -166,7 +171,7 @@ x pong with paddles getting closer?
 O count 1, 2, 3 down strip?
 x fix drips not waiting for last drip
 O shooting stars? (is that same as fireworks just without explosion?) maybe it's a roman candle and like reverse drip it builds then shoots
-O drop ball with bounce (similar to dip)
+x drop ball with bounce (similar to dip)
 x jump up platforms
 O sand clock
 x fix binary clock bomb so it always fits
@@ -194,30 +199,42 @@ x drips
 
 */
 
+void debugOut(const char* str) {
+  Serial.println(str);
+}
+
+#define RUN(str) \
+  { \
+    debugOut(#str); \
+    str; \
+    clearDelay(1000); \
+  } \
+
 void loop() {
-  #if 1
+  #if 0
 //  testSparks();
     //lavaLamp();
+    //metaballs();
   #else
-    pacman();          clearDelay(1000);
-    ripples();         clearDelay(1000);
-    timeBomb();        clearDelay(1000);
-    bounce();          clearDelay(1000);
-    heartbeat(30);     clearDelay(1000);
-    snow();            clearDelay(1000);
-    inchworm();
-    inchworm();        clearDelay(1000);
-    fireworks(30);     clearDelay(1000);
-    drips();           clearDelay(1000);
-    fireflies();       clearDelay(1000);
-    mario();           clearDelay(1000);
-    fuseBomb();        clearDelay(1000);
-    breakout();        clearDelay(1000);
-    cherryBlossoms();  clearDelay(1000);
-    fire();            clearDelay(1000);
-    traffic(120 * 30); 
-    twinkles();        clearDelay(1000);
-    pong();            clearDelay(1000);
+    RUN(pacman());
+    RUN(ripples());
+    RUN(timeBomb());
+    RUN(bounce());
+    RUN(heartbeat(30));
+    RUN(snow());
+    RUN(inchworm();
+    inchworm());
+    RUN(fireworks(30));
+    RUN(drips());
+    RUN(fireflies());
+    RUN(mario());
+    RUN(fuseBomb());
+    RUN(breakout());
+    RUN(cherryBlossoms());
+    RUN(fire());
+    RUN(traffic(120 * 30));
+    RUN(twinkles(););
+//    RUN(pong());
   #endif
 }
 
@@ -302,6 +319,45 @@ void testSparks() {
     LED::show();
     delay(5);
   }  
+}
+
+void metaballs() {
+  struct Metaball {
+     float pos;
+     float vel;
+     float radius;
+     int hue;
+  };
+  Metaball balls[3];
+  for (auto& ball : balls) {
+    ball.pos = random(LED::numPixels);
+    ball.radius = random(5, 20);
+    ball.hue = random(360);
+    ball.vel = random(-150, 150) / 100.0f;
+  }
+  while (true) {
+    for (auto &ball : balls) {
+//      ball.vel = maxMagnitude(ball.vel + random(2) ? -0.05 : 0.05, 5.5);
+      ball.pos += ball.vel;
+      if (ball.pos - ball.radius < 0) {
+        ball.vel = abs(ball.vel);
+      } else if (ball.pos + ball.radius >= LED::numPixels) {
+        ball.vel = -abs(ball.vel);
+      }
+    }
+    for (int i = 0; i < LED::numPixels; ++i) {
+      float energy = 0;
+      float hue = 0;
+      for (auto& ball : balls) {
+        float dist = abs(ball.pos - i);
+        energy += 1 / powf(dist / 60, 2.0f);
+        hue += energy * ball.hue / 1.0f;
+      }
+      LED::setPixel(i, LED::ColorHSV(euclideanModulo(hue / 3.0f, 360.0f) ,255, min(255, energy * 5)));
+    }
+    LED::show();
+    delay(5);
+  };
 }
 
 void lavaLamp() {
@@ -535,13 +591,14 @@ void pong() {
   
   explosion(LED::numPixels / 2);
 }
+
 void drips() {
   int numDrips = 10;
   int duration = 0;
   int timer = 0;
   int splashTimer = 0;
   bool haveSparks = true;
-  while (numDrips || timer || haveSparks) {
+  while (numDrips || timer > 0 || haveSparks) {
     LED::clear();
     if (timer <= 0 && numDrips) {
       duration = random(1000, 3000);
