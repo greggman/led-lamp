@@ -5,25 +5,6 @@
 #define LAMPS 144
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
-struct Spark {
-  int pos;
-  int vel;
-  int acc;
-  int duration;
-  int time;
-  int hueDeg;
-  int sat;
-  int val;
-  int hueDeg2;
-  int sat2;
-  int val2;
-  int hueDeg3;
-  int sat3;
-  int val3;
-};
-#define NUM_SPARKS 20
-Spark sparks[NUM_SPARKS];
-
 int degTo16(int32_t deg) {
   return deg * 65536 / 360;
 }
@@ -144,13 +125,101 @@ struct LED {
 
 Adafruit_NeoPixel LED::strip = Adafruit_NeoPixel(LAMPS, PIN, NEO_GRB + NEO_KHZ800);
 
+class SparkSystem {
+  public:
+    SparkSystem(int numSparks)
+      : numSparks(numSparks) {
+      sparks = new Spark[numSparks];
+      memset(sparks, 0, sizeof(Spark) * numSparks);
+    }
+    ~SparkSystem() {
+      delete[] sparks;
+    }
+    void add(int pos, int vel, int acc, int duration, int hueDeg, int sat, int val, int hueDeg2, int sat2, int val2) {
+      add(pos, vel, acc, duration, hueDeg, sat, val, hueDeg + (hueDeg2 - hueDeg) / 2, sat + (sat2 - sat) / 2, val + (val2 - val) / 2, hueDeg2, sat2, val2);
+    }
+    
+    void add(int pos, int vel, int acc, int duration, int hueDeg, int sat, int val, int hueDeg2, int sat2, int val2, int hueDeg3, int sat3, int val3) {
+      int minTime = sparks[0].time;
+      int ndx = 0;
+      for (int i = 1; i < numSparks; ++i) {
+        if (sparks[i].time < minTime) {
+          minTime = sparks[i].time;
+          ndx = i;
+        }
+      }
+    
+      Spark& spark = sparks[ndx];
+      spark.pos = pos * 128;
+      spark.vel = vel;
+      spark.acc = acc;
+      spark.duration = duration;
+      spark.time = duration;
+      spark.hueDeg = hueDeg;
+      spark.sat = sat;
+      spark.val = val;
+      spark.hueDeg2 = hueDeg2;
+      spark.sat2 = sat2;
+      spark.val2 = val2;
+      spark.hueDeg3 = hueDeg3;
+      spark.sat3 = sat3;
+      spark.val3 = val3;
+    }
+    
+    bool process() {
+      bool busy = false;
+      for (int i = 0; i < numSparks; ++i) {
+        auto& spark = sparks[i];
+        if (spark.time <= 0) continue;
+        busy = true;
+        int hue;
+        int sat;
+        int val;
+        int halfDuration = spark.duration / 2;
+        if (spark.time < halfDuration) {
+          hue = lerp360(spark.hueDeg3, spark.hueDeg2, spark.time, halfDuration);
+          sat = lerp(spark.sat3, spark.sat2, spark.time, halfDuration);
+          val = lerp(spark.val3, spark.val2, spark.time, halfDuration);
+        } else {
+          int time = spark.time - halfDuration;
+          hue = lerp360(spark.hueDeg2, spark.hueDeg, time, halfDuration);
+          sat = lerp(spark.sat2, spark.sat, time, halfDuration);
+          val = lerp(spark.val2, spark.val, time, halfDuration);
+        }
+        LED::setPixel(spark.pos >> 7, LED::ColorHSV16(degTo16(hue), sat, val));  
+        spark.vel += spark.acc;
+        spark.pos += spark.vel;
+        --spark.time;
+      }
+      return busy;
+    }
+    const int numSparks;
+  private:
+    struct Spark {
+      int pos;
+      int vel;
+      int acc;
+      int duration;
+      int time;
+      int hueDeg;
+      int sat;
+      int val;
+      int hueDeg2;
+      int sat2;
+      int val2;
+      int hueDeg3;
+      int sat3;
+      int val3;
+    };
+    Spark* sparks;
+};
+
 void setup() {
   Serial.begin(9600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }  
   Serial.println("--start--");
-  memset(&sparks, 0, sizeof(sparks));
   LED::init();
 }
 
@@ -243,72 +312,16 @@ void loop() {
   #endif
 }
 
-void addSpark(int pos, int vel, int acc, int duration, int hueDeg, int sat, int val, int hueDeg2, int sat2, int val2) {
-  addSpark2(pos, vel, acc, duration, hueDeg, sat, val, hueDeg + (hueDeg2 - hueDeg) / 2, sat + (sat2 - sat) / 2, val + (val2 - val) / 2, hueDeg2, sat2, val2);
-}
-
-void addSpark2(int pos, int vel, int acc, int duration, int hueDeg, int sat, int val, int hueDeg2, int sat2, int val2, int hueDeg3, int sat3, int val3) {
-  int minTime = sparks[0].time;
-  int ndx = 0;
-  for (int i = 1; i < NUM_SPARKS; ++i) {
-    if (sparks[i].time < minTime) {
-      minTime = sparks[i].time;
-      ndx = i;
-    }
-  }
-
-  Spark& spark = sparks[ndx];
-  spark.pos = pos * 128;
-  spark.vel = vel;
-  spark.acc = acc;
-  spark.duration = duration;
-  spark.time = duration;
-  spark.hueDeg = hueDeg;
-  spark.sat = sat;
-  spark.val = val;
-  spark.hueDeg2 = hueDeg2;
-  spark.sat2 = sat2;
-  spark.val2 = val2;
-  spark.hueDeg3 = hueDeg3;
-  spark.sat3 = sat3;
-  spark.val3 = val3;
-}
-
-bool processSparks() {
-  bool busy = false;
-  for (auto& spark : sparks) {
-    if (spark.time <= 0) continue;
-    busy = true;
-    int hue;
-    int sat;
-    int val;
-    int halfDuration = spark.duration / 2;
-    if (spark.time < halfDuration) {
-      hue = lerp360(spark.hueDeg3, spark.hueDeg2, spark.time, halfDuration);
-      sat = lerp(spark.sat3, spark.sat2, spark.time, halfDuration);
-      val = lerp(spark.val3, spark.val2, spark.time, halfDuration);
-    } else {
-      int time = spark.time - halfDuration;
-      hue = lerp360(spark.hueDeg2, spark.hueDeg, time, halfDuration);
-      sat = lerp(spark.sat2, spark.sat, time, halfDuration);
-      val = lerp(spark.val2, spark.val, time, halfDuration);
-    }
-    LED::setPixel(spark.pos >> 7, LED::ColorHSV16(degTo16(hue), sat, val));  
-    spark.vel += spark.acc;
-    spark.pos += spark.vel;
-    --spark.time;
-  }
-  return busy;
-}
 
 void testSparks() {
   int t = 0;
+  SparkSystem sparks(20);
   for(;;++t) {
     LED::clear();
     LED::setPixel(0, 0x800000);
     LED::setPixel(1, 0x008000);
     if (t % 40 == 0) { //random(8) == 0) {
-      addSpark(
+      sparks.add(
         LED::numPixels / 2,     // pos
         400,                 // vel
         -15,                 // acc, 
@@ -320,7 +333,7 @@ void testSparks() {
         255,                 // sat2
         0);                   // val2
     }
-    processSparks();
+    sparks.process();
     LED::show();
     delay(5);
   }  
@@ -545,6 +558,7 @@ void bounce() {
 }
 
 void mario() {
+  SparkSystem sparks(20);
   struct Platform {
     int pos;
     bool enemy;
@@ -592,7 +606,7 @@ void mario() {
         if (vel < 0 && pos <= targetHeight) {
           if (platform.enemy) {
             platform.enemy = false;
-            addSpark(
+            sparks.add(
               platform.pos,
               300,   // vel
               -10,   // acc
@@ -621,12 +635,12 @@ void mario() {
     }
     LED::fill(0x0000FF, pos, 3.0f);
     LED::fill(0xFF0000, pos + 5.0f, 3.0f);
-    processSparks();
+    sparks.process();
     LED::show();
     delay(5);
   }
   for (auto& platform : platforms) {
-    addSpark(
+    sparks.add(
       platform.pos,  // pos
       0,         // vel
       -2,        // acc
@@ -641,7 +655,7 @@ void mario() {
   bool hasSparks = true;
   while (hasSparks) {
     LED::clear();
-    hasSparks = processSparks();
+    hasSparks = sparks.process();
     LED::show();
     delay(5);
   }
@@ -684,6 +698,7 @@ void pong() {
 }
 
 void drips() {
+  SparkSystem sparks(20);
   int numDrips = 10;
   int duration = 0;
   int timer = 0;
@@ -702,7 +717,7 @@ void drips() {
       LED::setPixel(LED::numPixels - 1, LED::ColorHSV(200, 255, max_val));
       timer -= 5;
       if (timer <= 0) {
-        addSpark(
+        sparks.add(
           LED::numPixels - 1, // pos
           0,                  // vel
           -1,                 // acc
@@ -721,7 +736,7 @@ void drips() {
       splashTimer -= 1;
       if (splashTimer == 0) {
         for (int i = 0; i < 6; ++i) {
-          addSpark2(
+          sparks.add(
             0,    // pos
             random(50, 100),    // vel
             -1,                 // acc
@@ -739,7 +754,7 @@ void drips() {
       }
     }
     
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }
@@ -772,6 +787,7 @@ void fireflies() {
 }
 
 void twinkles() {
+  SparkSystem sparks(20);
   int numTwinkles = 60;
   int baseHue = random(360);
   bool haveSparks = true;
@@ -780,7 +796,7 @@ void twinkles() {
     if (numTwinkles && random(15) == 0) {
       --numTwinkles;
       int hue = baseHue + random(30);
-      addSpark2(
+      sparks.add(
           random(LED::numPixels),     // pos
           0,                // vel
           0,                // acc, 
@@ -795,13 +811,14 @@ void twinkles() {
           255,
           0);
     }
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }  
 }
 
 void ripples() {
+  SparkSystem sparks(20);
   int numRipples = 60;
   bool haveSparks = true;
   int frame = 0;
@@ -814,7 +831,7 @@ void ripples() {
       int pos = random(LED::numPixels);
       for (int i = 0; i < 6; ++i) {
         int vel = random(25, 45) * (random(2) ? -1 : 1);
-        addSpark2(
+        sparks.add(
             pos,     // pos
             vel,              // vel
             vel / 50,         // acc, 
@@ -830,13 +847,14 @@ void ripples() {
             0);
       }
     }
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }  
 }
 
 void breakout() {
+  SparkSystem sparks(20);
   int maxBricks = 6;
   int numBricks = maxBricks;
   bool haveSparks = true;
@@ -878,7 +896,7 @@ void breakout() {
         for (int i = 0; i < 6; ++i) {
           int vel = random(50, 100); //(random(2) ? 1 : -1);
           int hue = lerp(0, 360, numBricks, maxBricks);
-          addSpark2(
+          sparks.add(
             effectivePos,     // pos
             vel,              // vel
             -2,               // acc, 
@@ -901,7 +919,7 @@ void breakout() {
       }
     }
     LED::fill(LED::ColorHSV(60, 0, 255), effectivePos, 2);
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }
@@ -942,11 +960,12 @@ void timeBomb() {
 }
 
 void explosion(int pos) {
-    for (int i = 0; i < NUM_SPARKS; ++i) {
+  SparkSystem sparks(20);
+  for (int i = 0; i < sparks.numSparks; ++i) {
     int maxVel = random(100, 300);
     int vel = random(0, maxVel) * (random(2) ? 1 : -1);
     int hue = random(30, 60);          
-    addSpark2(
+    sparks.add(
          pos,                // pos
          vel,                // vel
          -vel / 80,          // acc, 
@@ -964,7 +983,7 @@ void explosion(int pos) {
   bool haveSparks = true;
   while (haveSparks) {
     LED::clear();
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }
@@ -1103,6 +1122,7 @@ void fuseBomb() {
     delay(5);
   }
   int frame = 0;
+  SparkSystem sparks(20);
   bool haveSparks = true;
   for (int height = LED::numPixels - 1; height >= 0 || haveSparks;) {
     for(int i = 0; i < LED::numPixels; ++i) {
@@ -1116,7 +1136,7 @@ void fuseBomb() {
       LED::fill(0xFF0000, 0, 3);
       if (random(5) == 0) {
         int vel = random(100, 400) * (random(2) ? 1 : -1);
-        addSpark(
+        sparks.add(
           height,    // pos
           vel,                // vel
           -vel / 25,           // acc, 
@@ -1132,11 +1152,11 @@ void fuseBomb() {
     if (frame % 8 == 0) {
       --height;
       if (height == 0) {
-        for (int i = 0; i < NUM_SPARKS; ++i) {
+        for (int i = 0; i < sparks.numSparks; ++i) {
           int maxVel = random(100, 300);
           int vel = random(0, maxVel);
           int hue = random(30, 60);          
-          addSpark2(
+          sparks.add(
                0,                  // pos
                vel,                // vel
                -vel / 80,           // acc, 
@@ -1153,7 +1173,7 @@ void fuseBomb() {
         }
       }
     }
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }
@@ -1174,6 +1194,7 @@ void fireworks(int numFireworks) {
     firework.time = -1;
   }
 
+  SparkSystem sparks(20);
   bool hasSparks = true;
   bool hasFireworks = true;
   while (numFireworks || hasSparks || hasFireworks) {
@@ -1195,7 +1216,7 @@ void fireworks(int numFireworks) {
         LED::setPixel(pos, LED::ColorHSV16(degTo16(hue), 255, 255));
         if (random(10) == 0) {
           int h = random(hue, hue + 20);
-          addSpark(
+          sparks.add(
             pos,                // pos
               0,                // vel
              -2,                // acc, 
@@ -1214,7 +1235,7 @@ void fireworks(int numFireworks) {
            for (int i = 0; i < numSparks; ++i) {
              int vel = random(-maxVel, maxVel);
              hue = random(hue - 20, hue + 20);
-             addSpark2(
+             sparks.add(
                pos,                // pos
                vel,                // vel
                -vel / 80,          // acc, 
@@ -1232,7 +1253,7 @@ void fireworks(int numFireworks) {
         }
       }
     }
-    hasSparks = processSparks();
+    hasSparks = sparks.process();
     LED::show();
     delay(5);
   }
@@ -1258,6 +1279,7 @@ typedef void (*PixelSetFn)(int pos, uint32_t color);
 typedef int (*IndexFn)(int pos);
 
 void inchworm() {
+  SparkSystem sparks(20);
   int head = 0;
   int tail = -10;
   bool reverse = random(2);
@@ -1291,7 +1313,7 @@ void inchworm() {
     setPixelColor(head - 1, LED::ColorHSV16(degTo16(0), 255, 255));
     setPixelColor(head, LED::ColorHSV16(degTo16(0), 255, 255));
     if (head + 2 == foodPos[target]) {
-      addSpark2(
+      sparks.add(
         index(foodPos[target++]),  // pos
         0,                  // vel
         0,                  // acc, 
@@ -1305,7 +1327,7 @@ void inchworm() {
         330,                // hue3
         255,                // sat3,
         0);                 // val3      
-      while(processSparks()) {
+      while(sparks.process()) {
         LED::show();
         delay(5);    
       }
@@ -1331,6 +1353,7 @@ void inchworm() {
 }
 
 void fire() {
+  SparkSystem sparks(20);
   int maxHeight = LED::numPixels / 2;
   int height = 0;
   int frames = 1000;
@@ -1353,7 +1376,7 @@ void fire() {
       LED::setPixel(p, LED::ColorHSV16(hue, sat, val));
     }
     if (random(15) == 0) {
-      addSpark(
+      sparks.add(
         effectiveHeight,    // pos
         200,                // vel
         -7,                 // acc, 
@@ -1365,7 +1388,7 @@ void fire() {
         255,                // sat2,
         40);                // val2,
     }
-    haveSparks = processSparks();
+    haveSparks = sparks.process();
     LED::show();
     delay(5);
   }
