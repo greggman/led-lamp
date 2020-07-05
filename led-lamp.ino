@@ -45,12 +45,16 @@ float euclideanModulo(float n, float m) {
 }
 
 int lerp360(int min, int max, int t, int range) {
-  if (abs(min - max) > 180) {
-    max = max + 180;
-  }
   min = euclideanModulo(min, 360);
   max = euclideanModulo(max, 360);
+  if (abs(min - max) > 180) {
+    max = euclideanModulo(max + 180, 360);
+  }
   return lerp(min, max, t, range);
+}
+
+uint32_t satAdd8(uint32_t a, uint32_t b) {
+  return min(a + b, 255);
 }
 
 // an API that uses ints. This makes most math much easier, no warnings, no errors
@@ -145,7 +149,7 @@ void setup() {
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }  
-  Serial.println("hello");
+  Serial.println("--start--");
   memset(&sparks, 0, sizeof(sparks));
   LED::init();
 }
@@ -223,18 +227,19 @@ void loop() {
     RUN(heartbeat(30));
     RUN(snow());
     RUN(inchworm();
-    inchworm());
+        inchworm());
     RUN(fireworks(30));
     RUN(drips());
     RUN(fireflies());
     RUN(mario());
+    RUN(blobs());
     RUN(fuseBomb());
     RUN(breakout());
     RUN(cherryBlossoms());
     RUN(fire());
     RUN(traffic(120 * 30));
     RUN(twinkles(););
-//    RUN(pong());
+    RUN(pong());
   #endif
 }
 
@@ -319,6 +324,92 @@ void testSparks() {
     LED::show();
     delay(5);
   }  
+}
+
+class Pixels {
+  public:
+    Pixels(uint32_t* pixels, int numPixels) :
+      numPixels(numPixels),
+      pixels(pixels) {
+    }
+
+    void clear() {
+      memset(pixels, 0, numPixels * sizeof(uint32_t));
+    }
+
+    void setAdditive(int pos, uint32_t color) {
+      if (pos < 0 || pos >= numPixels) {
+        return;
+      }
+      uint32_t dst = pixels[pos];
+      pixels[pos] = satAdd8((color >>  0) & 0xFF, (dst >>  0) & 0xFF) <<  0 |
+                    satAdd8((color >>  8) & 0xFF, (dst >>  8) & 0xFF) <<  8 |
+                    satAdd8((color >> 16) & 0xFF, (dst >> 16) & 0xFF) << 16 ;
+    }
+  
+    void fillAdditive(uint32_t color, int pos, int len) {
+       if (pos < 0) {
+         len += pos;
+         pos = 0;
+       }
+       int end = pos + len;
+       if (end > numPixels) {
+         len -= end - numPixels;
+       }
+       for (int i = 0; i < len; ++i) {
+         setAdditive(pos + i, color);
+       }
+    }
+
+    void show() {
+      for (int i = 0; i < numPixels; ++i) {
+        LED::setPixel(i, pixels[i]);
+      }
+    }
+    
+  private:
+    int numPixels;
+    uint32_t* pixels;
+};
+
+
+void blobs() {
+  uint32_t p[LED::numPixels];
+  Pixels pixels(p, LED::numPixels);
+
+  struct Blob {
+    int offset;
+    int hue;
+  };
+  Blob blobs[6];
+  for (auto& blob : blobs) {
+    blob.offset = random(10000);
+    blob.hue = random(360);
+  }
+
+  int val = 1;
+  int frame = 0;
+  while (val > 0) {
+    ++frame;
+    pixels.clear();
+
+    if (frame < 128) {
+      val = min(255, val + 2);
+    } else if (frame > 1500) {
+      val = max(0, val - 2); 
+    }
+
+    for (auto& blob : blobs) {
+      int i = blob.offset;
+      int p = ((sin(i + frame / 457.0f) + sin(i + frame / 200.0f)) * 0.25f + 0.5f) * LED::numPixels;
+      int radius = 1 + (sin(i + frame / 351.0f) * 0.5 + 0.5 * 7);
+      pixels.fillAdditive(LED::ColorHSV(blob.hue, 255, val), p - radius, radius * 2 );
+    }
+
+    pixels.show();
+    LED::show();
+    delay(5);
+  }
 }
 
 void metaballs() {
